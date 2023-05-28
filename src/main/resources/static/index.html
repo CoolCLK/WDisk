@@ -1,0 +1,192 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <style>
+            body {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+            }
+
+            api/loginBox {
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            #filesBox {
+                display: flex;
+                flex: 1 1 auto;
+                flex-direction: column;
+                width: 100%;
+                height: 100%;
+                animation: fadeIn 1s ease;
+            }
+
+            #filesList {
+                display: flex;
+                flex: 1 1 auto;
+                flex-direction: column;
+                overflow: auto;
+            }
+
+            .loginForm {
+                background: #FFFFFF;
+                border: 1px solid #5F5F5F;
+                border-radius: 1em;
+                width: 87.5%;
+                min-width: 17.5em;
+                max-width: 30em;
+                padding: 3%;
+                animation: slideUp 1s ease;
+            }
+
+            @keyframes fadeIn {
+                0% {
+                    opacity: 0;
+                }
+                100% {
+                    opacity: 1;
+                }
+            }
+
+            @keyframes slideUp {
+                0% {
+                    opacity: 0;
+                    translate: 0 50%;
+                }
+                100% {
+                    opacity: 1;
+                }
+            }
+        </style>
+        <script>
+            window.onload = async function() {
+                checkLogin();
+            }
+
+            window.onbeforeunload = function(event) {
+                if (!confirm('确认要关闭界面吗')) {
+                    event.preventEvent();
+                }
+            }
+
+            getQueryString = function(name) {
+                const url_string = window.location.href;
+                const url = new URL(url_string);
+                return url.searchParams.get(name);
+            }
+
+            listFiles = async function() {
+                var apiUrl = 'api/listFiles';
+                if (getQueryString('search')) {
+                    apiUrl += '?search=' + getQueryString('search');
+                }
+                await fetch(apiUrl)
+                    .then(response => response.json())
+                    .then(data => {
+                        var inner = '';
+                        if (data['list']) {
+                            for (var i = 0; i < data['list'].length; i++) {
+                                var dataFile = data['list'][i];
+                                var fileDes = '';
+                                var fileButton = '';
+                                if (dataFile['directory']) {
+                                    fileDes = '类型: 文件夹;';
+                                } else {
+                                    fileButton += '<button type="button" class="btn btn-outline-primary" onclick="window.open(\'' + dataFile['rawUrl'] + '\');">下载</button>';
+                                    fileDes = '大小: ' + (dataFile['size']).toString() + ' B; 类型: ' + '文件;';
+                                }
+                                fileButton += '<button type="button" class="btn btn-outline-danger" onclick="window.open(\'' + dataFile['deleteUrl'] + '\');">删除</button>';
+                                inner += '<div class="card"><div class="card-body"><div style="float: left;"><h5 class="card-title">' + dataFile['name'] + '</h5><h6 class="card-subtitle mb-2 text-muted">' + fileDes + '</h6></div><div style="float: right;">' + fileButton + '</div></div></div>';
+                            }
+                        }
+                        document.getElementById('filesList').innerHTML = inner;
+                    });
+            }
+
+            checkLogin = async function() {
+                await fetch('api/logined')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data['logined'] && data['correct']) {
+                            listFiles();
+                            document.getElementById('filesBox').style.display = 'flex';
+                        } else {
+                            document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
+                            document.getElementById('loginBox').style.display = 'flex';
+                        }
+                    });
+            }
+
+            loginRequest = function(form) {
+                const formData = new FormData(form);
+                const xhr = new XMLHttpRequest();
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState == 4) {
+                        const json = JSON.parse(xhr.response);
+                        if (json['correct']) {
+                            document.getElementById('filesBox').style.display = 'flex';
+                            document.getElementById('loginBox').style.display = 'none';
+                        } else {
+
+                        }
+                    }
+                };
+                xhr.open('POST', form.action);
+                xhr.send(formData);
+                return false;
+            }
+        </script>
+    </head>
+    <body>
+        <div id="filesBox" style="display: none;">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light" style="width: 100%; height: 5em;">
+                <div class="container-fluid">
+                    <a class="navbar-brand" style="font-weight: bold; cursor: pointer;" onclick="window.location.href = '/';">我的网盘</a>
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                            <li class="nav-item">
+                                <a class="nav-link active" style="cursor: pointer;">上传文件</a>
+                            </li>
+                        </ul>
+                        <div class="d-flex">
+                            <input class="form-control me-2" type="search" id="searchTextbox" placeholder="输入文件名..." aria-label="Search">
+                            <button class="btn btn-outline-success text-nowrap" type="submit" onclick="window.location.href = '?search=' + document.getElementById('searchTextbox').value;">搜索</button>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+            <div id="filesList">
+            </div>
+        </div>
+        <div id="loginBox" style="display: none;">
+            <form action="api/login" method="post" class="loginForm" onsubmit="return loginRequest(this);">
+                <div class="page-header">
+                    <h3 id="loginTitle">登录</h3>
+                </div>
+                <div class="col-md">
+                    <div class="form-floating">
+                        <input type="password" class="form-control" name="password" id="loginPassword" autocomplete="off" placeholder="输入密码" required>
+                        <label for="loginPassword">密码</label>
+                    </div>
+                </div>
+                <br>
+                <div class="col-md">
+                    <input type="submit" value="登录" class="btn btn-primary mb-3" />
+                </div>
+            </form>
+        </div>
+    </body>
+</html>

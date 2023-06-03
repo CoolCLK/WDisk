@@ -14,6 +14,18 @@
                 bottom: 0;
             }
 
+            footer {
+                position: fixed;
+                bottom: 0;
+                translate: 0 87.5%;
+                text-align: center;
+                background: #F8F9FA;
+                color: #000000;
+                width: 100%;
+                padding: 0.75em;
+                transition: translate 1s ease;
+            }
+
             api/loginBox {
                 width: 100%;
                 height: 100%;
@@ -73,23 +85,22 @@
                 checkLogin();
             }
 
-            window.onbeforeunload = function(event) {
-                if (!confirm('确认要关闭界面吗')) {
-                    event.preventEvent();
-                }
-            }
-
             getQueryString = function(name) {
                 const url_string = window.location.href;
                 const url = new URL(url_string);
-                return url.searchParams.get(name);
+                const query = url.searchParams.get(name);
+                if (query == null) {
+                    return '';
+                }
+                return query;
+            }
+
+            alertMessage = async function(message) {
+                const bsAlert = new bootstrap.Alert('#myAlert');
             }
 
             listFiles = async function() {
-                var apiUrl = 'api/listFiles';
-                if (getQueryString('search')) {
-                    apiUrl += '?search=' + getQueryString('search');
-                }
+                var apiUrl = 'api/listFiles?path=' + getQueryString('path') + '&search=' + getQueryString('search');
                 await fetch(apiUrl)
                     .then(response => response.json())
                     .then(data => {
@@ -97,19 +108,50 @@
                         if (data['list']) {
                             for (var i = 0; i < data['list'].length; i++) {
                                 var dataFile = data['list'][i];
-                                var fileDes = '';
-                                var fileButton = '';
-                                if (dataFile['directory']) {
-                                    fileDes = '类型: 文件夹;';
-                                } else {
-                                    fileButton += '<button type="button" class="btn btn-outline-primary" onclick="window.open(\'' + dataFile['rawUrl'] + '\');">下载</button>';
-                                    fileDes = '大小: ' + (dataFile['size']).toString() + ' B; 类型: ' + '文件;';
-                                }
-                                fileButton += '<button type="button" class="btn btn-outline-danger" onclick="window.open(\'' + dataFile['deleteUrl'] + '\');">删除</button>';
-                                inner += '<div class="card"><div class="card-body"><div style="float: left;"><h5 class="card-title">' + dataFile['name'] + '</h5><h6 class="card-subtitle mb-2 text-muted">' + fileDes + '</h6></div><div style="float: right;">' + fileButton + '</div></div></div>';
+                                inner += `
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div style="float: left;">
+                                            <h5 class="card-title">` + dataFile['name'] + `</h5>
+                                            <h6 class="card-subtitle mb-2 text-muted">` + (dataFile['directory'] ? '文件夹' : '文件') + `</h6>
+                                        </div>
+                                        <div class="dropdown" style="float: right;">
+                                            <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                操作
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li><a class="dropdown-item" href="javascript:;" onclick="window.location.href = '` + dataFile['rawUrl'] + `';">下载</a></li>
+                                                <li><a class="dropdown-item" href="javascript:;" onclick="backLoad('` + dataFile['deleteUrl'] + `'); setTimeout(listFiles(), 3000);">删除</a></li>
+                                                <div class="dropdown-divider"></div>
+                                                <li><a class="dropdown-item` + (dataFile['directory'] ? '' : ' disabled') + `" href="javascript:;"` + (dataFile['directory'] ? (` onclick="window.location.href = '?path=` + dataFile['realPath'] + `&search=` + getQueryString('search') + `';"`) : '') + `>打开文件夹</a></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>`;
                             }
                         }
                         document.getElementById('filesList').innerHTML = inner;
+                    });
+            }
+
+            backLoad = function(url) {
+                var xmlHttpRequest = new XMLHttpRequest();
+                xmlHttpRequest.open("GET", url);
+                xmlHttpRequest.send();
+            }
+
+            uploadFile = async function() {
+                await fetch('api/upload')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data['logined'] && data['correct']) {
+                            listFiles();
+                            document.getElementById('searchTextbox').value = getQueryString('search');
+                            document.getElementById('filesBox').style.display = 'flex';
+                        } else {
+                            document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
+                            document.getElementById('loginBox').style.display = 'flex';
+                        }
                     });
             }
 
@@ -119,6 +161,7 @@
                     .then(data => {
                         if (data['logined'] && data['correct']) {
                             listFiles();
+                            document.getElementById('searchTextbox').value = getQueryString('search');
                             document.getElementById('filesBox').style.display = 'flex';
                         } else {
                             document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
@@ -149,7 +192,7 @@
     </head>
     <body>
         <div id="filesBox" style="display: none;">
-            <nav class="navbar navbar-expand-lg navbar-light bg-light" style="width: 100%; height: 5em;">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light" style="width: 100%; min-height: 5em;">
                 <div class="container-fluid">
                     <a class="navbar-brand" style="font-weight: bold; cursor: pointer;" onclick="window.location.href = '/';">我的网盘</a>
                     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
@@ -188,5 +231,8 @@
                 </div>
             </form>
         </div>
+        <footer onmouseover="this.style.translate = '0 0';" onmouseout="this.style.translate = '0 87.5%';">
+            Powered by <a href="https://github.com/CoolCLK/WDisk" target="_blank">WDisk</a>
+        </footer>
     </body>
 </html>

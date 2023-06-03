@@ -5,6 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link href="css/bootstrap.min.css" rel="stylesheet">
         <script src="js/bootstrap.bundle.min.js"></script>
+        <title>我的网盘</title>
         <style>
             body {
                 position: fixed;
@@ -26,7 +27,7 @@
                 transition: translate 1s ease;
             }
 
-            api/loginBox {
+            #loginBox {
                 width: 100%;
                 height: 100%;
                 display: flex;
@@ -40,7 +41,6 @@
                 flex-direction: column;
                 width: 100%;
                 height: 100%;
-                animation: fadeIn 1s ease;
             }
 
             #filesList {
@@ -95,17 +95,21 @@
                 return query;
             }
 
-            alertMessage = async function(message) {
-                const bsAlert = new bootstrap.Alert('#myAlert');
+            setQueryString = function(name, value) {
+                const url_string = window.location.href;
+                const url = new URL(url_string);
+                url.searchParams.set(name, value);
+                window.location.href = url;
             }
 
             listFiles = async function() {
                 var apiUrl = 'api/listFiles?path=' + getQueryString('path') + '&search=' + getQueryString('search');
                 await fetch(apiUrl)
                     .then(response => response.json())
-                    .then(data => {
+                    .then(async data => {
                         var inner = '';
                         if (data['list']) {
+                            const permission = await getPermissionMap();
                             for (var i = 0; i < data['list'].length; i++) {
                                 var dataFile = data['list'][i];
                                 inner += `
@@ -116,14 +120,15 @@
                                             <h6 class="card-subtitle mb-2 text-muted">` + (dataFile['directory'] ? '文件夹' : '文件') + `</h6>
                                         </div>
                                         <div class="dropdown" style="float: right;">
-                                            <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                                 操作
                                             </button>
                                             <ul class="dropdown-menu">
-                                                <li><a class="dropdown-item" href="javascript:;" onclick="window.location.href = '` + dataFile['rawUrl'] + `';">下载</a></li>
-                                                <li><a class="dropdown-item" href="javascript:;" onclick="backLoad('` + dataFile['deleteUrl'] + `'); setTimeout(listFiles(), 3000);">删除</a></li>
+                                                <li><a class="dropdown-item` + ((permission['downloadFiles'] && !dataFile['directory']) ? '" href="' + dataFile['downloadUrl'] + '" download="' + dataFile['name'] + '"' : ' disabled"') + `>下载</a></li>
+                                                <li><a class="dropdown-item` + (permission['controlFiles'] ? '' : ' disabled') + `" href="javascript:;"  data-bs-toggle="form" onclick="const newName = prompt('请输入新的文件名', '` + dataFile['name'] + `'); if (newName.trim() != '' && newName != null) { backLoad('api/renameFile?file=` + dataFile['realPath'] + `&name=' + newName + ''); setTimeout('reloadData();', 1000); }">重命名</a></li>
+                                                <li><a class="dropdown-item` + (permission['controlFiles'] ? '' : ' disabled') + `" href="javascript:;"  data-bs-toggle="form" onclick="backLoad('` + dataFile['deleteUrl'] + `'); setTimeout('reloadData();;', 1000);">删除</a></li>
                                                 <div class="dropdown-divider"></div>
-                                                <li><a class="dropdown-item` + (dataFile['directory'] ? '' : ' disabled') + `" href="javascript:;"` + (dataFile['directory'] ? (` onclick="window.location.href = '?path=` + dataFile['realPath'] + `&search=` + getQueryString('search') + `';"`) : '') + `>打开文件夹</a></li>
+                                                <li><a class="dropdown-item` + (dataFile['directory'] ? '' : ' disabled') + `" href="javascript:;"` + (dataFile['directory'] ? (` onclick="setQueryString('path', '` + dataFile['realPath'] + `');"`) : '') + `>打开文件夹</a></li>
                                             </ul>
                                         </div>
                                     </div>
@@ -136,37 +141,103 @@
 
             backLoad = function(url) {
                 var xmlHttpRequest = new XMLHttpRequest();
-                xmlHttpRequest.open("GET", url);
+                xmlHttpRequest.open('GET', url);
                 xmlHttpRequest.send();
             }
 
             uploadFile = async function() {
-                await fetch('api/upload')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data['logined'] && data['correct']) {
-                            listFiles();
-                            document.getElementById('searchTextbox').value = getQueryString('search');
-                            document.getElementById('filesBox').style.display = 'flex';
-                        } else {
-                            document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
-                            document.getElementById('loginBox').style.display = 'flex';
+                var fileUploader = document.createElement('input');
+                fileUploader.setAttribute('type', 'file');
+                fileUploader.setAttribute('multiple', 'multiple');
+                fileUploader.setAttribute('style', 'display: none;');
+                fileUploader.setAttribute('onchange', `
+                    const files = this.files;
+                    var formData = new FormData();
+                    if (getQueryString('path')) {
+                        formData.append('path', getQueryString('path'));
+                    }
+                    formData.append('file', files);
+                    var xmlHttpRequest = new XMLHttpRequest();
+                    xmlHttpRequest.open('POST', 'api/uploadFile');
+                    xmlHttpRequest.send(formData);
+                    xmlHttpRequest.onreadystatechange = function() {
+                        if (xmlHttpRequest.readyState == 4) {
+                            const json = JSON.parse(xmlHttpRequest.response);
+                            if (json['status'] == 1) {
+                                reloadData();
+                            }
                         }
-                    });
+                    };`);
+                document.body.appendChild(fileUploader);
+                fileUploader.click();
+                fileUploader.remove();
+            }
+
+            createFolder = async function() {
+                const folderName = prompt('请键入新的文件夹名称', '');
+                if (folderName != null && folderName != ''){
+                    fetch('api/createFolder?path=' + getQueryString('path') + folderName)
+                        .then(response => response.json())
+                        .then(async data => {
+                            if (data['status'] == 1) {
+                                reloadData();
+                            }
+                        });
+                }
             }
 
             checkLogin = async function() {
                 await fetch('api/logined')
                     .then(response => response.json())
-                    .then(data => {
-                        if (data['logined'] && data['correct']) {
-                            listFiles();
-                            document.getElementById('searchTextbox').value = getQueryString('search');
-                            document.getElementById('filesBox').style.display = 'flex';
+                    .then(async data => {
+                        if (data['pass']) {
+                            reloadData();
                         } else {
                             document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
                             document.getElementById('loginBox').style.display = 'flex';
+                            await fetch('api/logined')
+                                .then(response => response.json())
+                                .then(async data => {
+                                    if (data['pass'] || (getQueryString('guest') != '' && await checkPermission('listFiles'))) {
+                                        reloadData();
+                                    } else {
+                                        document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
+                                        if (await checkPermission('listFiles')) {
+                                            document.getElementById('loginByGuest').style = 'block';
+                                        }
+                                        document.getElementById('loginBox').style.display = 'flex';
+                                    }
+                                });
                         }
+                    });
+            }
+
+            reloadData = async function() {
+                await listFiles();
+                if (getQueryString('guest') != '') {
+                    document.getElementById('guestModeAlert').style.display = 'block';
+                }
+                if (await checkPermission('controlFiles')) {
+                    document.getElementById('uploadFileButton').setAttribute('onclick', 'uploadFile();');
+                    document.getElementById('createFolderButton').setAttribute('onclick', 'createFolder();');
+                }
+                document.getElementById('titleName').innerText = document.title;
+                document.getElementById('searchTextbox').value = getQueryString('search');
+                document.getElementById('filesBox').style.animation = 'fadeIn 1s ease';
+                document.getElementById('loginBox').style.display = 'none';
+                document.getElementById('filesBox').style.display = 'flex';
+            }
+
+            checkPermission = async function(name) {
+                const permission = (await getPermissionMap())[name];
+                return permission;
+            }
+
+            getPermissionMap = async function() {
+                return await fetch('api/permission')
+                    .then(response => response.json())
+                    .then(data => {
+                        return data['permission'];
                     });
             }
 
@@ -177,8 +248,7 @@
                     if (xhr.readyState == 4) {
                         const json = JSON.parse(xhr.response);
                         if (json['correct']) {
-                            document.getElementById('filesBox').style.display = 'flex';
-                            document.getElementById('loginBox').style.display = 'none';
+                            reloadData();
                         } else {
 
                         }
@@ -188,25 +258,35 @@
                 xhr.send(formData);
                 return false;
             }
+
+            byGuest = function() {
+                setQueryString('guest', 'guest');
+            }
         </script>
     </head>
     <body>
         <div id="filesBox" style="display: none;">
+            <div id="guestModeAlert" class="alert alert-dark" role="alert" style="display: none; text-align: center; width: 100%;">
+                你正在处于访客状态 <strong style="cursor: pointer;" onclick="window.location.href = '/';">登录</strong>
+            </div>
             <nav class="navbar navbar-expand-lg navbar-light bg-light" style="width: 100%; min-height: 5em;">
                 <div class="container-fluid">
-                    <a class="navbar-brand" style="font-weight: bold; cursor: pointer;" onclick="window.location.href = '/';">我的网盘</a>
+                    <a id="titleName" class="navbar-brand" style="font-weight: bold; cursor: pointer;" onclick="window.location.href = '';">我的网盘</a>
                     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
                         <span class="navbar-toggler-icon"></span>
                     </button>
                     <div class="collapse navbar-collapse" id="navbarSupportedContent">
                         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                             <li class="nav-item">
-                                <a class="nav-link active" style="cursor: pointer;">上传文件</a>
+                                <a id="uploadFileButton" class="nav-link" style="cursor: pointer;">上传文件</a>
+                            </li>
+                            <li class="nav-item">
+                                <a id="createFolderButton" class="nav-link" style="cursor: pointer;">新建文件夹</a>
                             </li>
                         </ul>
                         <div class="d-flex">
                             <input class="form-control me-2" type="search" id="searchTextbox" placeholder="输入文件名..." aria-label="Search">
-                            <button class="btn btn-outline-success text-nowrap" type="submit" onclick="window.location.href = '?search=' + document.getElementById('searchTextbox').value;">搜索</button>
+                            <button class="btn btn-outline-success text-nowrap" type="submit" onclick="setQueryString('search', document.getElementById('searchTextbox').value);">搜索</button>
                         </div>
                     </div>
                 </div>
@@ -228,6 +308,9 @@
                 <br>
                 <div class="col-md">
                     <input type="submit" value="登录" class="btn btn-primary mb-3" />
+                </div>
+                <div class="col-md">
+                    <a id="loginByGuest" class="link-offset-2 link-underline link-underline-opacity-0" style="display: none;" href="javascript:;" onclick="byGuest();">我是访客</a>
                 </div>
             </form>
         </div>

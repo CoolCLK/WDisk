@@ -27,4 +27,19 @@ public class ApplicationProperties {
      * 用户登录后Cookie的寿命
      */
     private int loginCookieLife = 604800;
+
+    /**
+     * 是否允许访客查看文件列表
+     */
+    private boolean allowGuestListFiles = false;
+
+    /**
+     * 是否允许访客下载文件
+     */
+    private boolean allowGuestDownloadFiles = false;
+
+    /**
+     * 是否允许访客上传文件
+     */
+    private boolean allowGuestControlFiles = false;
 }

@@ -1,10 +1,8 @@
 package me.coolclk.wdisk;
 
-import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.websocket.server.PathParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +11,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.*;
 
 @SpringBootApplication
@@ -57,19 +58,23 @@ public class Application {
 			Map<String, Object> requestMap = new HashMap<>();
 			List<Map<String, Object>> fileList = new ArrayList<>();
 			if ((boolean) checkUserLogin(httpServletRequest).getOrDefault("correct", false)) {
-				File disk = new File(APPLICATIONPROPERTIES.getRealPath());
+				String pathKey = "";
+				if (requestParam.containsKey("path") && requestParam.get("path") != "") {
+					pathKey = (String) requestParam.get("path") + "/";
+				}
+				File disk = new File(APPLICATIONPROPERTIES.getRealPath() + "/" + pathKey);
 				if (disk.exists() && disk.isDirectory()) {
 					File[] diskFiles = disk.listFiles();
 					if (diskFiles != null) {
 						String searchKey = null;
-						if (requestParam.containsKey("search")) {
+						if (requestParam.containsKey("search") && requestParam.get("search") != "") {
 							searchKey = (String) requestParam.get("search");
 						}
 						for (File file : diskFiles) {
 							String name = file.getName();
 							if (searchKey == null || name.contains(searchKey)) {
-								String path = "" + name;
-								fileList.add(new HashMap<>(Map.of("name", name, "directory", file.isDirectory(), "size", file.length(), "rawUrl", "raw/" + path, "deleteUrl", "api/deleteFile?file=" + path)));
+								String path = pathKey + name;
+								fileList.add(new HashMap<>(Map.of("name", name, "directory", file.isDirectory(), "size", file.length(), "realPath", path, "rawUrl", "raw/" + path, "deleteUrl", "api/deleteFile?file=" + path)));
 							}
 						}
 					}
@@ -80,30 +85,41 @@ public class Application {
 		}
 
 		@ResponseBody
-		@GetMapping(value = "raw/{file}")
-		public void getRawFile(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, @PathParam(value = "file") String filepath) {
+		@RequestMapping(value = "api/deleteFile")
+		public Map<String, Object> deleteDiskFile(HttpServletRequest httpServletRequest, @RequestParam Map<String, Object> requestParam) {
+			Map<String, Object> requestMap = new HashMap<>();
+			requestMap.put("status", 0);
+			if ((boolean) checkUserLogin(httpServletRequest).getOrDefault("correct", false)) {
+				if (requestParam.containsKey("file") && requestParam.get("file") != "") {
+					File file = new File(APPLICATIONPROPERTIES.getRealPath() + "/" + requestParam.get("file"));
+					if (file.exists()) {
+						if (file.delete()) {
+							requestMap.put("status", 1);
+						}
+					}
+				}
+			}
+			return requestMap;
+		}
+
+		@GetMapping(value = "raw/{file}/**")
+		public void getRawFile(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, @PathVariable(value = "file") String filepath) {
 			File file = new File(APPLICATIONPROPERTIES.getRealPath() + "/" + filepath);
 			if (file.exists() && file.isFile()) {
-				httpServletResponse.reset();
-				httpServletResponse.setCharacterEncoding("UTF-8");
-				httpServletResponse.setContentType("application/octet-stream");
-				httpServletResponse.setHeader("Content-Disposition", "attachment;fileName=" + file.getName());
-				httpServletResponse.addHeader("Content-Length", String.valueOf(file.length()));
-				httpServletResponse.setHeader("Access-Control-Allow-Origin", "*");
-				try {
-					FileInputStream fileInputStream = new FileInputStream(file);
-					InputStream fis = new BufferedInputStream(fileInputStream);
-					byte[] buffer = new byte[fis.available()];
-					fis.read(buffer);
-					fis.close();
-					BufferedOutputStream os = new BufferedOutputStream(httpServletResponse.getOutputStream());
-					os.write(buffer);
-					os.flush();
-					fis.close();
-					fileInputStream.close();
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
+				try (FileInputStream inputStream = new FileInputStream(file); OutputStream outputStream = httpServletResponse.getOutputStream()) {
+					byte[] data = new byte[1024];
+					httpServletResponse.reset();
+					httpServletResponse.setCharacterEncoding("UTF-8");
+					httpServletResponse.setContentType("application/x-msdownload");
+					httpServletResponse.setHeader("Accept-Ranges", "bytes");
+					httpServletResponse.addHeader("Content-Length", String.valueOf(file.length()));
+					httpServletResponse.setHeader("Access-Control-Allow-Origin", "*");
+					int read;
+					while ((read = inputStream.read(data)) != -1) {
+						outputStream.write(data, 0, read);
+					}
+					outputStream.flush();
+				} catch (IOException ignored) { }
 			}
 		}
 	}

@@ -3,10 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link href="css/bootstrap.min.css" rel="stylesheet">
-        <script src="js/bootstrap.bundle.min.js"></script>
-        <title>我的网盘</title>
-        <style>
+        <style type="text/css">
             body {
                 position: fixed;
                 top: 0;
@@ -80,7 +77,7 @@
                 }
             }
         </style>
-        <script>
+        <script type="text/javascript">
             window.onload = async function() {
                 checkLogin();
             }
@@ -126,7 +123,7 @@
                                             <ul class="dropdown-menu">
                                                 <li><a class="dropdown-item` + ((permission['downloadFiles'] && !dataFile['directory']) ? '" href="' + dataFile['downloadUrl'] + '" download="' + dataFile['name'] + '"' : ' disabled"') + `>下载</a></li>
                                                 <li><a class="dropdown-item` + (permission['controlFiles'] ? '' : ' disabled') + `" href="javascript:;"  data-bs-toggle="form" onclick="const newName = prompt('请输入新的文件名', '` + dataFile['name'] + `'); if (newName.trim() != '' && newName != null) { backLoad('api/renameFile?file=` + dataFile['realPath'] + `&name=' + newName + ''); setTimeout('reloadData();', 1000); }">重命名</a></li>
-                                                <li><a class="dropdown-item` + (permission['controlFiles'] ? '' : ' disabled') + `" href="javascript:;"  data-bs-toggle="form" onclick="backLoad('` + dataFile['deleteUrl'] + `'); setTimeout('reloadData();;', 1000);">删除</a></li>
+                                                <li><a class="dropdown-item` + (permission['controlFiles'] ? '' : ' disabled') + `" href="javascript:;"  data-bs-toggle="form" onclick="backLoad('` + dataFile['deleteUrl'] + `');">删除</a></li>
                                                 <div class="dropdown-divider"></div>
                                                 <li><a class="dropdown-item` + (dataFile['directory'] ? '' : ' disabled') + `" href="javascript:;"` + (dataFile['directory'] ? (` onclick="setQueryString('path', '` + dataFile['realPath'] + `');"`) : '') + `>打开文件夹</a></li>
                                             </ul>
@@ -146,43 +143,32 @@
             }
 
             uploadFile = async function() {
+                var fileUploadParentForm = document.createElement('form');
                 var fileUploader = document.createElement('input');
                 fileUploader.setAttribute('type', 'file');
+                fileUploader.setAttribute('name', 'file');
                 fileUploader.setAttribute('multiple', 'multiple');
                 fileUploader.setAttribute('style', 'display: none;');
-                fileUploader.setAttribute('onchange', `
-                    const files = this.files;
-                    var formData = new FormData();
+                fileUploader.onchange = function() {
+                    var formData = new FormData(fileUploadParentForm);
+                    formData.append('path', '');
                     if (getQueryString('path')) {
                         formData.append('path', getQueryString('path'));
                     }
-                    formData.append('file', files);
                     var xmlHttpRequest = new XMLHttpRequest();
                     xmlHttpRequest.open('POST', 'api/uploadFile');
                     xmlHttpRequest.send(formData);
-                    xmlHttpRequest.onreadystatechange = function() {
-                        if (xmlHttpRequest.readyState == 4) {
-                            const json = JSON.parse(xmlHttpRequest.response);
-                            if (json['status'] == 1) {
-                                reloadData();
-                            }
-                        }
-                    };`);
-                document.body.appendChild(fileUploader);
+                }
+                fileUploadParentForm.appendChild(fileUploader);
+                document.body.appendChild(fileUploadParentForm);
                 fileUploader.click();
-                fileUploader.remove();
+                fileUploadParentForm.remove();
             }
 
             createFolder = async function() {
                 const folderName = prompt('请键入新的文件夹名称', '');
                 if (folderName != null && folderName != ''){
-                    fetch('api/createFolder?path=' + getQueryString('path') + folderName)
-                        .then(response => response.json())
-                        .then(async data => {
-                            if (data['status'] == 1) {
-                                reloadData();
-                            }
-                        });
+                    fetch('api/createFolder?path=' + getQueryString('path') + folderName);
                 }
             }
 
@@ -191,7 +177,7 @@
                     .then(response => response.json())
                     .then(async data => {
                         if (data['pass']) {
-                            reloadData();
+                            startReloadData();
                         } else {
                             document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
                             document.getElementById('loginBox').style.display = 'flex';
@@ -199,7 +185,7 @@
                                 .then(response => response.json())
                                 .then(async data => {
                                     if (data['pass'] || (getQueryString('guest') != '' && await checkPermission('listFiles'))) {
-                                        reloadData();
+                                        startReloadData();
                                     } else {
                                         document.getElementById('loginTitle').innerText = '登录至 ' + document.domain;
                                         if (await checkPermission('listFiles')) {
@@ -210,6 +196,13 @@
                                 });
                         }
                     });
+            }
+
+            startReloadData = function() {
+                reloadData();
+                setInterval(function() {
+                    reloadData();
+                }, 3000); // 刷新文件间隔
             }
 
             reloadData = async function() {
@@ -248,7 +241,7 @@
                     if (xhr.readyState == 4) {
                         const json = JSON.parse(xhr.response);
                         if (json['correct']) {
-                            reloadData();
+                            startReloadData();
                         } else {
 
                         }
@@ -263,6 +256,10 @@
                 setQueryString('guest', 'guest');
             }
         </script>
+        <script src="js/jquery-3.7.0.min.js"></script>
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <title>我的网盘</title>
     </head>
     <body>
         <div id="filesBox" style="display: none;">

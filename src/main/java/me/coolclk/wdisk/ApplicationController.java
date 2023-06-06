@@ -145,11 +145,11 @@ public class ApplicationController {
         requestMap.put("status", 0);
         if ((boolean) checkUserLogin(httpServletRequest).getOrDefault("pass", false) || APPLICATIONPROPERTIES.isAllowGuestControlFiles()) {
             requestMap.put("permission", true);
-            String path = APPLICATIONPROPERTIES.getRealPath() + "/" + filepath + "/";
+            String path = APPLICATIONPROPERTIES.getRealPath() + "/" + filepath;
             try {
                 for (MultipartFile file : files) {
                     if (!file.isEmpty()) {
-                        file.transferTo(Path.of(path + file.getOriginalFilename()));
+                        file.transferTo(Path.of(path + "/" + file.getOriginalFilename()));
                     }
                 }
                 requestMap.put("status", 1);
@@ -191,8 +191,8 @@ public class ApplicationController {
         if ((boolean) checkUserLogin(httpServletRequest).getOrDefault("pass", false) || APPLICATIONPROPERTIES.isAllowGuestControlFiles()) {
             requestMap.put("permission", true);
             if (requestParam.containsKey("path")) {
-                File directory = new File(APPLICATIONPROPERTIES.getRealPath() + "/" + requestParam.get("path"));
-                if (directory.exists() || directory.mkdirs()) {
+                File directory = new File(APPLICATIONPROPERTIES.getRealPath() + "/" + requestParam.get("path") + "/");
+                if (directory.mkdirs()) {
                     requestMap.put("status", 1);
                 }
             }

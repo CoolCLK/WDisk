@@ -151,7 +151,7 @@
                 fileUploader.setAttribute('style', 'display: none;');
                 fileUploader.onchange = function() {
                     var formData = new FormData(fileUploadParentForm);
-                    formData.append('path', '');
+                    formData.append('path', '/');
                     if (getQueryString('path')) {
                         formData.append('path', getQueryString('path'));
                     }
